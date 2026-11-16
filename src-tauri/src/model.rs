@@ -1,5 +1,35 @@
 use serde::{Deserialize, Serialize};
 
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum VideoContainer {
+    #[default]
+    Mp4,
+    Mkv,
+}
+
+impl VideoContainer {
+    pub fn extension(self) -> &'static str {
+        match self {
+            Self::Mp4 => "mp4",
+            Self::Mkv => "mkv",
+        }
+    }
+}
+
+// Earlier queue files always downloaded video as MKV.
+fn legacy_container() -> VideoContainer {
+    VideoContainer::Mkv
+}
+
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum VideoCodec {
+    #[default]
+    Auto,
+    Av1,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Quality {
@@ -28,6 +58,8 @@ pub struct Video {
     pub channel: String,
     pub duration: f64,
     pub thumbnail: String,
+    #[serde(default)]
+    pub video_codec: VideoCodec,
     pub qualities: Vec<Quality>,
     pub subtitles: Vec<Subtitle>,
 }
@@ -50,6 +82,8 @@ pub struct Job {
     pub video: Video,
     pub format: String,
     pub quality_label: String,
+    #[serde(default = "legacy_container")]
+    pub container: VideoContainer,
     pub subtitle: Option<Subtitle>,
     pub folder: String,
     pub status: Status,
@@ -67,6 +101,10 @@ pub struct Queue {
     pub paused: bool,
     pub folder: String,
     pub setup_complete: bool,
+    #[serde(default)]
+    pub video_container: VideoContainer,
+    #[serde(default)]
+    pub video_codec: VideoCodec,
 }
 
 impl Default for Queue {
@@ -80,6 +118,8 @@ impl Default for Queue {
             paused: false,
             folder: folder.to_string_lossy().into(),
             setup_complete: false,
+            video_container: VideoContainer::default(),
+            video_codec: VideoCodec::default(),
         }
     }
 }

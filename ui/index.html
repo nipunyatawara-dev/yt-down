@@ -1,43 +1,234 @@
 <!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="color-scheme" content="light dark">
-  <title>YT Down</title><link rel="stylesheet" href="style.css">
-</head>
-<body>
-<div id="app">
-  <header class="topbar">
-    <div class="brand"><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="8"/><path d="M10 5.5v8m-3-3 3 3 3-3"/></svg><span>YT Down</span></div>
-    <div class="header-actions"><span id="activity" class="activity">Ready</span><button id="settings-button" class="icon-button" title="Settings" aria-label="Settings"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m8 3 .6-1h2.8l.6 1 .3 1.2 1 .6 1.2-.3 1.1.2 1.4 2.4-.3 1.1-.9.9v1.2l.9.9.3 1.1-1.4 2.4-1.1.2-1.2-.3-1 .6-.3 1.2-.6 1H8l-.6-1-.3-1.2-1-.6-1.2.3-1.1-.2-1.4-2.4.3-1.1.9-.9V9.1l-.9-.9-.3-1.1 1.4-2.4 1.1-.2 1.2.3 1-.6z"/><circle cx="10" cy="9.7" r="2.6"/></svg></button></div>
-  </header>
-  <main>
-    <section id="setup" hidden>
-      <div class="intro"><h1 id="setup-title">Download tools</h1><p id="setup-description">Checking the tools used to download and convert media.</p></div>
-      <div id="dependencies" class="dependency-list" aria-live="polite"><div class="loading"><span class="spinner"></span>Checking installed tools…</div></div>
-      <div id="install-help" class="install-help" hidden><p>Install the missing tools, then check again.</p><pre id="install-command"></pre><button id="copy-command" class="text-button">Copy command</button></div>
-      <div class="setup-actions"><button id="rescan" class="secondary">Check Again</button><button id="continue" class="primary" disabled>Done</button></div>
-      <div class="settings-bottom"><button id="setup-back" class="text-button" hidden>‹ Downloads</button><button id="quit" class="text-button">Quit YT Down</button></div>
-    </section>
-    <section id="downloads" hidden>
-      <button id="dependency-warning" class="dependency-warning" hidden></button>
-      <section class="composer" aria-label="New download">
-        <form id="link-form"><label class="sr-only" for="url">YouTube video link</label><div class="link-input"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m8 12 4-4m-5.5 2L5 11.5a3.2 3.2 0 0 0 4.5 4.5l2.5-2.5m1.5-3.5L15 8.5A3.2 3.2 0 0 0 10.5 4.0L8 6.5"/></svg><input id="url" type="url" placeholder="Paste a YouTube link" autocomplete="off" spellcheck="false" required aria-describedby="link-hint"><button id="inspect" type="submit" class="fetch-button" aria-label="Load video" title="Load video"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M15 5v6a3 3 0 0 1-3 3H4m3-3-3 3 3 3"/></svg></button></div><p id="link-hint" class="small">Choose a video quality, MP3, or subtitles.</p></form>
-        <div id="metadata-loading" class="loading" hidden><span class="spinner"></span><span>Loading video…</span></div>
-        <section id="video-card" class="video-card" hidden>
-          <div class="video-summary"><img id="thumbnail" alt=""><div><h2 id="video-title"></h2><p id="video-byline"></p></div><button id="clear-video" class="icon-button" aria-label="Clear selected video" title="Clear">×</button></div>
-          <div class="options"><div class="field"><label for="quality">Format</label><select id="quality"></select></div><div class="field"><label for="subtitle">Subtitles</label><select id="subtitle"><option value="">None</option></select></div></div>
-          <div class="download-actions"><p id="subtitle-note" class="small"></p><button id="download" class="primary"><span id="download-label">Download</span></button></div>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>YT Down</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="topbar">
+        <div class="brand">
+          <svg viewBox="0 0 20 20" aria-hidden="true">
+            <circle cx="10" cy="10" r="8" />
+            <path d="M10 5.5v8m-3-3 3 3 3-3" /></svg
+          ><span>YT Down</span>
+        </div>
+        <div class="header-actions">
+          <span id="activity" class="activity">Ready</span
+          ><button
+            id="settings-button"
+            class="icon-button"
+            title="Settings"
+            aria-label="Settings"
+          >
+            <svg viewBox="0 0 20 20" aria-hidden="true">
+              <path
+                d="m8 3 .6-1h2.8l.6 1 .3 1.2 1 .6 1.2-.3 1.1.2 1.4 2.4-.3 1.1-.9.9v1.2l.9.9.3 1.1-1.4 2.4-1.1.2-1.2-.3-1 .6-.3 1.2-.6 1H8l-.6-1-.3-1.2-1-.6-1.2.3-1.1-.2-1.4-2.4.3-1.1.9-.9V9.1l-.9-.9-.3-1.1 1.4-2.4 1.1-.2 1.2.3 1-.6z"
+              />
+              <circle cx="10" cy="9.7" r="2.6" />
+            </svg>
+          </button>
+        </div>
+      </header>
+      <main>
+        <section id="setup" hidden>
+          <div class="settings-header">
+            <h1 id="setup-title">Settings</h1>
+            <button id="setup-back" class="text-button" hidden>
+              ‹ Downloads
+            </button>
+          </div>
+          <section
+            class="settings-section"
+            aria-labelledby="download-settings-title"
+          >
+            <h2 id="download-settings-title">Downloads</h2>
+            <div class="settings-group">
+              <div class="settings-location">
+                <span>Save to</span>
+                <div>
+                  <button
+                    id="settings-folder"
+                    class="folder-path"
+                    title="Choose download folder"
+                  ></button
+                  ><button id="settings-choose-folder" class="secondary">
+                    Choose…
+                  </button>
+                </div>
+              </div>
+              <div class="field">
+                <label for="default-container">Video file</label
+                ><select id="default-container">
+                  <option value="mp4">MP4 (default)</option>
+                  <option value="mkv">MKV</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="default-codec">Video codec</label
+                ><select id="default-codec">
+                  <option value="auto">Automatic · best available</option>
+                  <option value="av1">AV1</option>
+                </select>
+              </div>
+            </div>
+            <p id="preferences-note" class="small">
+              Changes apply to new queue items. AV1 availability varies by
+              video.
+            </p>
+          </section>
+          <section class="settings-section" aria-labelledby="tools-title">
+            <h2 id="tools-title">Download Tools</h2>
+            <p id="setup-description" class="small">
+              Checking installed tools…
+            </p>
+            <div id="dependencies" class="dependency-list" aria-live="polite">
+              <div class="loading">
+                <span class="spinner"></span>Checking installed tools…
+              </div>
+            </div>
+            <div id="install-help" class="install-help" hidden>
+              <p>Install the missing tools, then check again.</p>
+              <pre id="install-command"></pre>
+              <button id="copy-command" class="text-button">
+                Copy command
+              </button>
+            </div>
+          </section>
+          <div class="setup-actions">
+            <button id="rescan" class="secondary">Check Again</button
+            ><button id="continue" class="primary" disabled>Done</button>
+          </div>
         </section>
-      </section>
-      <section class="queue-section" aria-label="Download queue"><div class="queue-heading"><h2>Queue <span id="queue-count">0</span></h2><div class="queue-controls"><button id="clear-history" class="text-button" hidden>Clear Finished</button><button id="pause" class="mini-button" hidden>Pause</button></div></div><p id="queue-description" class="small">Downloads run one at a time.</p>
-        <div id="queue" aria-live="off"></div><div id="empty" class="empty"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M8 9h16M8 15h16M8 21h8m6-2v9m-3-3 3 3 3-3"/></svg><p>No downloads</p><span>Paste a link above to get started.</span></div>
-      </section>
-      <div class="folder-row"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2 6V4h6l2 2h8v10H2z"/></svg><button id="choose-folder" title="Choose download folder"></button><button id="open-folder" class="icon-button" aria-label="Open download folder" title="Open in Finder"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M11 4h5v5m0-5-8 8m0-7H4v11h11v-4"/></svg></button></div>
-    </section>
-  </main>
-  <footer><span id="footer-status"></span><button id="footer-quit" class="text-button" title="Quit YT Down">Quit</button></footer>
-</div>
-<div id="toast" role="status" hidden></div>
-<script src="app.js"></script>
-</body></html>
+        <section id="downloads" hidden>
+          <button
+            id="dependency-warning"
+            class="dependency-warning"
+            hidden
+          ></button>
+          <section class="composer" aria-label="New download">
+            <form id="link-form">
+              <label class="sr-only" for="url">YouTube video link</label>
+              <div class="link-input">
+                <svg viewBox="0 0 20 20" aria-hidden="true">
+                  <path
+                    d="m8 12 4-4m-5.5 2L5 11.5a3.2 3.2 0 0 0 4.5 4.5l2.5-2.5m1.5-3.5L15 8.5A3.2 3.2 0 0 0 10.5 4.0L8 6.5"
+                  /></svg
+                ><input
+                  id="url"
+                  type="url"
+                  placeholder="Paste a YouTube link"
+                  autocomplete="off"
+                  spellcheck="false"
+                  required
+                  aria-describedby="link-hint"
+                /><button
+                  id="inspect"
+                  type="submit"
+                  class="fetch-button"
+                  aria-label="Load video"
+                  title="Load video"
+                >
+                  <svg viewBox="0 0 20 20" aria-hidden="true">
+                    <path d="M15 5v6a3 3 0 0 1-3 3H4m3-3-3 3 3 3" />
+                  </svg>
+                </button>
+              </div>
+              <p id="link-hint" class="small">
+                Choose a video quality, MP3, or subtitles.
+              </p>
+            </form>
+            <div id="metadata-loading" class="loading" hidden>
+              <span class="spinner"></span><span>Loading video…</span>
+            </div>
+            <section id="video-card" class="video-card" hidden>
+              <div class="video-summary">
+                <img id="thumbnail" alt="" />
+                <div>
+                  <h2 id="video-title"></h2>
+                  <p id="video-byline"></p>
+                </div>
+                <button
+                  id="clear-video"
+                  class="icon-button"
+                  aria-label="Clear selected video"
+                  title="Clear"
+                >
+                  ×
+                </button>
+              </div>
+              <div class="options">
+                <div class="field">
+                  <label for="quality">Download</label
+                  ><select id="quality"></select>
+                </div>
+                <div class="field">
+                  <label for="subtitle">Subtitles</label
+                  ><select id="subtitle">
+                    <option value="">None</option>
+                  </select>
+                </div>
+              </div>
+              <div class="download-actions">
+                <div class="download-notes">
+                  <p id="output-note" class="small">MP4 video</p>
+                  <p id="subtitle-note" class="small"></p>
+                </div>
+                <button id="download" class="primary">
+                  <span id="download-label">Download</span>
+                </button>
+              </div>
+            </section>
+          </section>
+          <section class="queue-section" aria-label="Download queue">
+            <div class="queue-heading">
+              <h2>Queue <span id="queue-count">0</span></h2>
+              <div class="queue-controls">
+                <button id="clear-history" class="text-button" hidden>
+                  Clear Finished</button
+                ><button id="pause" class="mini-button" hidden>Pause</button>
+              </div>
+            </div>
+            <p id="queue-description" class="small">
+              Downloads run one at a time.
+            </p>
+            <div id="queue" aria-live="off"></div>
+            <div id="empty" class="empty">
+              <svg viewBox="0 0 32 32" aria-hidden="true">
+                <path d="M8 9h16M8 15h16M8 21h8m6-2v9m-3-3 3 3 3-3" />
+              </svg>
+              <p>No downloads</p>
+              <span>Paste a link above to get started.</span>
+            </div>
+          </section>
+          <div class="folder-row">
+            <svg viewBox="0 0 20 20" aria-hidden="true">
+              <path d="M2 6V4h6l2 2h8v10H2z" /></svg
+            ><button id="choose-folder" title="Choose download folder"></button
+            ><button
+              id="open-folder"
+              class="icon-button"
+              aria-label="Open download folder"
+              title="Open in Finder"
+            >
+              <svg viewBox="0 0 20 20" aria-hidden="true">
+                <path d="M11 4h5v5m0-5-8 8m0-7H4v11h11v-4" />
+              </svg>
+            </button>
+          </div>
+        </section>
+      </main>
+      <footer>
+        <span id="footer-status"></span
+        ><button id="footer-quit" class="text-button" title="Quit YT Down">
+          Quit
+        </button>
+      </footer>
+    </div>
+    <div id="toast" role="status" hidden></div>
+    <script src="app.js"></script>
+  </body>
+</html>

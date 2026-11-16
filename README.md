@@ -6,7 +6,7 @@ A compact menu bar downloader with a Rust engine and a Tauri system webview. Cli
 
 Paste a YouTube video, Shorts, or share link. The app loads its thumbnail, title, available resolutions, and subtitle languages. Choose a video quality, MP3 audio, or subtitles only. Choose a subtitle language or None, then download. The link clears immediately so the next video can be prepared while the queue runs.
 
-Video downloads keep the selected source quality and best available audio in an MKV container. Subtitles are saved as separate SRT files and also embedded in video downloads. MP3 conversion uses FFmpeg's highest-quality variable bitrate setting. Automatic captions and translations are labeled separately from creator-provided subtitles. YouTube must make a language available for it to appear.
+New video downloads default to MP4. Settings can switch the container to MKV and select Automatic or AV1 for the video codec. The chosen resolution and source video codec are preserved without re-encoding. MP4 prefers AAC/M4A audio for compatibility. Selecting AV1 lists only source AV1 qualities, while audio-only and subtitle-only downloads remain available. Subtitles are saved as separate SRT files and also embedded in video downloads. MP3 conversion uses FFmpeg's highest-quality variable bitrate setting. Automatic captions and translations are labeled separately from creator-provided subtitles. YouTube must make a language available for it to appear.
 
 The queue runs one download at a time. Move waiting items up or down, cancel, retry, pause upcoming downloads, and open finished files' folders. Pausing holds the next download and lets the current item finish. The queue and destination persist. Interrupted work returns paused on relaunch and can resume its partial files. Quit is available under Setup and settings after the active download is canceled or completed.
 
@@ -20,7 +20,7 @@ brew install yt-dlp ffmpeg deno
 
 FFmpeg includes ffprobe. Deno handles YouTube's JavaScript challenges. Tools are detected on the computer and are not bundled or silently installed. An existing Homebrew installation is needed to use the command above. Restart the app after installing new dependencies.
 
-Choose the save folder with the folder row below the composer. It defaults to `~/Downloads/YT Down`. Each queued item remembers the folder chosen when it was added.
+Choose the save folder in Settings or with the folder row below the composer. File format, codec, and folder preferences persist between launches. It defaults to `~/Downloads/YT Down`. Each queued item remembers its folder and container when added. Existing saved queue entries retain their original MKV format. File sizes and transfer speeds automatically use B, KB, MB, or GB, with decimal units matching macOS file-size conventions.
 
 ## Develop and build
 
