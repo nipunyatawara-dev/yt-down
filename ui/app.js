@@ -600,6 +600,7 @@ async function start() {
   const initial = await invoke("bootstrap");
   queue = initial.queue;
   platform = initial.platform;
+  $("app-version").textContent = initial.versionLabel;
   document.body.dataset.platform = platform;
   if (initial.dependencies) renderDependencies(initial.dependencies);
   if (initial.firstLaunch) showSetup();

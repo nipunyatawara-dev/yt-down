@@ -17,15 +17,18 @@ use tauri::{Emitter, Manager, State};
 struct Bootstrap {
     queue: Queue,
     platform: String,
+    version_label: String,
     first_launch: bool,
     dependencies: Option<Vec<dependencies::Dependency>>,
 }
 
 #[tauri::command]
-fn bootstrap(state: State<Arc<Engine>>) -> Bootstrap {
+fn bootstrap(app: tauri::AppHandle, state: State<Arc<Engine>>) -> Bootstrap {
+    let version = &app.package_info().version;
     Bootstrap {
         queue: state.queue.lock().unwrap().clone(),
         platform: std::env::consts::OS.into(),
+        version_label: format!("{}.{} ({})", version.major, version.minor, version.build),
         first_launch: state.first_launch,
         dependencies: state.dependencies.lock().unwrap().clone(),
     }

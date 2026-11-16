@@ -4,3 +4,7 @@ dist/
 .DS_Store
 *.log
 src-tauri/gen/
+src-tauri/target-windows/
+
+.packaging-venv/
+packaging/.cache/
