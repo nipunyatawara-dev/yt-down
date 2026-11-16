@@ -308,7 +308,8 @@ function renderQueue() {
     ? "Downloading"
     : queue.paused
       ? "Paused"
-      : "Ready";
+      : "";
+  $("activity").hidden = !active && !queue.paused;
   $("activity").classList.toggle("running", !!active);
   $("pause").hidden = !active && !pending.length;
   $("pause").textContent = queue.paused ? "Resume" : "Pause";
