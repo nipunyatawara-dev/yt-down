@@ -876,3 +876,11 @@ body[data-platform="windows"] main {
     outline: 1px solid var(--line);
   }
 }
+
+.app-version { flex-shrink: 0; font-variant-numeric: tabular-nums; color: var(--secondary); }
+#footer-status { margin-left: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+body[data-platform="windows"] #app { height: 100vh; display: flex; flex-direction: column; }
+body[data-platform="windows"] main { flex: 1; min-height: 0; }
+body[data-platform="windows"] .topbar,
+body[data-platform="windows"] footer { flex-shrink: 0; }

@@ -1,6 +1,6 @@
 [package]
 name = "yt-down"
-version = "0.2.1"
+version = "1.0.0+1"
 description = "A small, queued YouTube downloader"
 authors = ["Nipun Yatawara"]
 edition = "2021"
@@ -36,3 +36,6 @@ objc2-foundation = "0.3"
 objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSApplication", "NSStatusBar", "NSStatusItem", "NSStatusBarButton", "NSPopover", "NSViewController", "NSView", "NSWindow", "NSImage", "NSButton", "NSControl", "NSResponder", "NSRunningApplication", "NSGraphics", "NSAppearance", "objc2-core-foundation"] }
 objc2-user-notifications = "0.3"
 block2 = "0.6"
+
+[features]
+custom-protocol = ["tauri/custom-protocol"]

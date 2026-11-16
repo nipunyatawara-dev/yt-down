@@ -1,6 +1,6 @@
 {
   "name": "yt-down",
-  "version": "0.2.1",
+  "version": "1.0.0+1",
   "private": true,
   "description": "Rust-powered YouTube downloads from your menu bar or desktop",
   "scripts": {
