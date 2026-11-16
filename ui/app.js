@@ -1,0 +1,277 @@
+'use strict';
+const { invoke } = window.__TAURI__.core;
+const { listen } = window.__TAURI__.event;
+const $ = id => document.getElementById(id);
+let queue = { jobs: [], paused: false, folder: '', setupComplete: false };
+let video = null;
+let request = 0;
+let adding = false;
+let platform = 'macos';
+let toastTimer;
+let pasteTimer;
+let keyboardInput = false;
+const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+function animateEntry(node, origin = 'center top') {
+  if (reducedMotion.matches || keyboardInput) return;
+  node.getAnimations().forEach(animation => animation.cancel());
+  node.style.transformOrigin = origin;
+  node.animate([{ opacity: 0, transform: 'translateY(-5px) scale(.98)' }, { opacity: 1, transform: 'translateY(0) scale(1)' }], { duration: 220, easing: 'cubic-bezier(.23,1,.32,1)' });
+}
+document.addEventListener('keydown', () => { keyboardInput = true; document.body.classList.add('keyboard'); });
+document.addEventListener('pointerdown', () => { keyboardInput = false; document.body.classList.remove('keyboard'); });
+let deps = [];
+const jobNodes = new Map();
+
+function toast(message, error = false) {
+  clearTimeout(toastTimer);
+  $('toast').textContent = String(message);
+  $('toast').classList.toggle('error', error);
+  $('toast').hidden = false;
+  requestAnimationFrame(() => $('toast').classList.add('visible'));
+  $('toast').onmouseenter = () => clearTimeout(toastTimer);
+  $('toast').onmouseleave = () => { toastTimer = setTimeout(hideToast, 2500); };
+  toastTimer = setTimeout(hideToast, error ? 8000 : 3500);
+}
+function hideToast() { $('toast').classList.remove('visible'); }
+function report(error) { toast(error, true); }
+function element(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+function duration(seconds) {
+  const minutes = Math.floor(seconds / 60);
+  return minutes >= 60 ? `${Math.floor(minutes / 60)}h ${minutes % 60}m` : `${minutes} min`;
+}
+function size(bytes) { return bytes ? ` · ≈ ${(bytes / 1024 ** 3).toFixed(2)} GB` : ''; }
+function resetVideo() {
+  video = null;
+  $('video-card').hidden = true;
+  $('thumbnail').removeAttribute('src');
+}
+function updateDownloadButton() {
+  const format = $('quality').value;
+  const pending = queue.jobs.some(j => ['queued', 'downloading', 'processing'].includes(j.status));
+  $('download-label').textContent = pending || queue.paused ? 'Add to queue' : format === 'subtitles' ? 'Download subtitles' : format === 'mp3' ? 'Download MP3' : 'Download video';
+  $('download').disabled = adding || !video || (format === 'subtitles' && !$('subtitle').value);
+  const sub = video?.subtitles.find(s => s.id === $('subtitle').value);
+  $('subtitle-note').textContent = sub ? (sub.automatic ? 'Automatic captions may include errors. Saved as an SRT file.' : 'Creator-provided captions. Saved as an SRT file.') : (video && !video.subtitles.length ? 'No subtitles are available for this video.' : 'Optional. Video subtitles are also embedded in the MKV.');
+}
+async function inspect() {
+  const url = $('url').value.trim();
+  if (!url) return;
+  clearTimeout(pasteTimer);
+  const current = ++request;
+  resetVideo();
+  $('metadata-loading').hidden = false;
+  $('inspect').disabled = true;
+  $('link-hint').textContent = 'Looking up available formats and languages…';
+  try {
+    const result = await invoke('inspect_video', { url });
+    if (current !== request) return;
+    video = result;
+    $('video-title').textContent = video.title;
+    $('video-title').title = video.title;
+    $('video-byline').textContent = `${video.channel} · ${duration(video.duration)}`;
+    if (video.thumbnail) { $('thumbnail').src = video.thumbnail; $('thumbnail').hidden = false; }
+    else { $('thumbnail').hidden = true; }
+    $('quality').replaceChildren();
+    const videoGroup = element('optgroup');
+    videoGroup.label = 'Video with audio';
+    video.qualities.forEach((quality, index) => {
+      const option = element('option', '', `${quality.label}${index === 0 ? ' · Best' : ''}${size(quality.size)}`);
+      option.value = quality.id;
+      videoGroup.append(option);
+    });
+    $('quality').append(videoGroup);
+    const extras = element('optgroup'); extras.label = 'Audio & subtitles';
+    for (const [value, label] of [['mp3', 'MP3 · Audio only'], ['subtitles', 'Subtitles only · SRT']]) {
+      const option = element('option', '', label); option.value = value;
+      option.disabled = value === 'subtitles' && video.subtitles.length === 0;
+      extras.append(option);
+    }
+    $('quality').append(extras);
+    $('subtitle').replaceChildren(new Option('None', ''));
+    for (const automatic of [false, true]) {
+      const tracks = video.subtitles.filter(s => s.automatic === automatic);
+      if (!tracks.length) continue;
+      const group = element('optgroup'); group.label = automatic ? 'Automatic captions & translations' : 'Creator-provided subtitles';
+      tracks.forEach(sub => group.append(new Option(`${sub.name} (${sub.language})`, sub.id)));
+      $('subtitle').append(group);
+    }
+    $('video-card').hidden = false;
+    animateEntry($('video-card'));
+    $('link-hint').textContent = 'Choose what you want to save below.';
+    updateDownloadButton();
+  } catch (error) {
+    if (current === request) { $('link-hint').textContent = 'Could not load this video. Check the link and try again.'; report(error); }
+  } finally {
+    if (current === request) { $('metadata-loading').hidden = true; $('inspect').disabled = false; }
+  }
+}
+
+async function addDownload() {
+  if (!video || adding) return;
+  adding = true;
+  updateDownloadButton();
+  try {
+    queue = await invoke('enqueue', { videoId: video.id, format: $('quality').value, subtitleId: $('subtitle').value || null });
+    ++request;
+    resetVideo();
+    $('url').value = '';
+    $('link-hint').textContent = 'Added. Paste another link to keep your queue going.';
+    renderQueue();
+    $('url').focus();
+    toast(queue.paused ? 'Added to your paused queue.' : 'Added to your queue.');
+  } catch (error) { report(error); }
+  finally { adding = false; updateDownloadButton(); }
+}
+async function queueAction(action, id = null) {
+  try { queue = await invoke('queue_action', { action, id }); renderQueue(); }
+  catch (error) { report(error); }
+}
+function actionButton(label, symbol, action, id) {
+  const button = element('button', '', symbol);
+  button.title = label; button.setAttribute('aria-label', label);
+  button.addEventListener('click', () => queueAction(action, id));
+  return button;
+}
+function createJobNode(job) {
+  const node = element('article', 'job');
+  const top = element('div', 'job-top');
+  const number = element('span', 'job-number');
+  const info = element('div', 'job-info');
+  const title = element('div', 'job-title', job.video.title); title.title = job.video.title;
+  const detail = element('div', 'job-detail');
+  info.append(title, detail);
+  const actions = element('div', 'job-actions');
+  top.append(number, info, actions);
+  const progress = element('div', 'job-progress');
+  const track = element('div', 'progress-track');
+  track.setAttribute('role', 'progressbar'); track.setAttribute('aria-label', `${job.video.title} download`);
+  track.setAttribute('aria-valuemin', '0'); track.setAttribute('aria-valuemax', '100');
+  const fill = element('div', 'progress-fill'); track.append(fill);
+  const meta = element('div', 'progress-meta');
+  const percent = element('span'); const speed = element('span');
+  meta.append(percent, speed); progress.append(track, meta);
+  const error = element('p', 'job-error');
+  node.append(top, progress, error);
+  return { node, number, detail, actions, progress, track, fill, percent, speed, error, status: null };
+}
+function renderQueue() {
+  const active = queue.jobs.find(j => ['downloading', 'processing'].includes(j.status));
+  const pending = queue.jobs.filter(j => j.status === 'queued');
+  const finished = queue.jobs.filter(j => ['completed', 'failed', 'canceled'].includes(j.status));
+  $('queue-count').textContent = pending.length + (active ? 1 : 0);
+  $('activity').textContent = active ? 'Downloading' : queue.paused ? 'Paused' : 'Ready';
+  $('activity').classList.toggle('running', !!active);
+  $('pause').hidden = !active && !pending.length;
+  $('pause').textContent = queue.paused ? 'Resume queue' : 'Pause queue';
+  $('pause').title = 'Pause holds the next download. The current download keeps running.';
+  $('clear-history').hidden = !finished.length;
+  $('queue-description').textContent = queue.paused ? 'Queue paused. Resume when you’re ready.' : active ? `${pending.length} waiting · Downloading one at a time` : 'One at a time. In your order.';
+  $('empty').hidden = queue.jobs.length > 0;
+  $('choose-folder').textContent = queue.folder.replace(/^\/Users\/[^/]+\//, '~/');
+  $('choose-folder').title = `Save to ${queue.folder}. Click to change.`;
+  $('footer-status').textContent = active ? 'Downloads continue while this panel is closed.' : '';
+  if (platform !== 'macos' && active) $('footer-status').textContent = 'Keep the app open while downloading.';
+  const ordered = [...(active ? [active] : []), ...pending, ...finished.slice().reverse()];
+  const ids = new Set(ordered.map(j => j.id));
+  for (const [id, row] of jobNodes) { if (!ids.has(id)) { row.node.remove(); jobNodes.delete(id); } }
+  ordered.forEach((job, index) => {
+    const isNew = !jobNodes.has(job.id);
+    if (isNew) jobNodes.set(job.id, createJobNode(job));
+    const row = jobNodes.get(job.id);
+    const running = ['downloading', 'processing'].includes(job.status);
+    row.node.className = `job ${job.status}`;
+    row.number.className = `job-number${running ? ' active' : ''}`;
+    row.number.textContent = running ? '↓' : job.status === 'completed' ? '✓' : job.status === 'failed' ? '!' : job.status === 'canceled' ? '−' : pending.indexOf(job) + 1;
+    row.detail.textContent = `${job.qualityLabel}${job.subtitle ? ` · ${job.subtitle.name}` : ''}${job.status === 'queued' ? ' · Waiting' : job.status === 'completed' ? ' · Saved' : job.status === 'failed' ? ' · Failed' : job.status === 'canceled' ? ' · Canceled' : ''}`;
+    row.progress.hidden = !running;
+    row.progress.classList.toggle('processing', job.status === 'processing');
+    row.fill.style.transform = `scaleX(${job.progress / 100})`;
+    row.track.setAttribute('aria-valuenow', Math.round(job.progress));
+    row.percent.textContent = job.status === 'processing' ? 'Finishing · merging or converting…' : `${Math.floor(job.progress)}%`;
+    row.speed.textContent = [job.speed, job.eta ? `${job.eta} left` : ''].filter(Boolean).join(' · ');
+    row.error.hidden = !job.error;
+    row.error.textContent = job.error || '';
+    if (row.status !== job.status) {
+      row.actions.replaceChildren();
+      if (job.status === 'queued') row.actions.append(actionButton('Move earlier', '↑', 'up', job.id), actionButton('Move later', '↓', 'down', job.id));
+      if (running || job.status === 'queued') row.actions.append(actionButton('Cancel download', '×', 'cancel', job.id));
+      if (['failed', 'canceled'].includes(job.status)) row.actions.append(actionButton('Retry download', '↻', 'retry', job.id));
+      if (job.status === 'completed') {
+        const reveal = element('button', '', '↗'); reveal.title = 'Show in folder'; reveal.setAttribute('aria-label', 'Show in folder');
+        reveal.onclick = () => invoke('reveal_folder', { id: job.id }).catch(report);
+        row.actions.append(reveal);
+      }
+      row.status = job.status;
+    }
+    if ($('queue').children[index] !== row.node) $('queue').insertBefore(row.node, $('queue').children[index] || null);
+    if (isNew) animateEntry(row.node);
+  });
+  updateDownloadButton();
+}
+function showSetup() { $('setup').hidden = false; $('downloads').hidden = true; $('setup-back').hidden = !queue.setupComplete; }
+function showDownloads() { $('setup').hidden = true; $('downloads').hidden = false; renderQueue(); }
+async function scan() {
+  $('rescan').disabled = true; $('continue').disabled = true;
+  $('dependencies').replaceChildren(element('div', 'loading', 'Scanning installed tools…'));
+  try {
+    deps = await invoke('scan_dependencies');
+    $('dependencies').replaceChildren();
+    deps.forEach(dep => {
+      const row = element('div', 'dependency');
+      const state = element('span', `dependency-state${dep.version ? '' : ' missing'}`, dep.version ? '✓' : '!');
+      const info = element('div', 'dependency-info');
+      info.append(element('strong', '', dep.name), element('p', '', dep.purpose));
+      const version = element('span', 'dependency-version', dep.version ? dep.version.replace(/^ff\w+ version /, '') : 'Missing');
+      version.title = dep.path ? `${dep.version}\n${dep.path}` : 'Install this tool, then check again.';
+      row.append(state, info, version); $('dependencies').append(row);
+    });
+    const missing = deps.filter(d => d.required && !d.version);
+    $('install-help').hidden = !missing.length;
+    $('continue').disabled = missing.length > 0;
+    $('install-command').textContent = platform === 'windows' ? 'winget install --id yt-dlp.yt-dlp -e\nwinget install --id Gyan.FFmpeg -e\nwinget install --id DenoLand.Deno -e' : 'brew install yt-dlp ffmpeg deno';
+  } catch (error) { $('dependencies').textContent = 'Could not scan dependencies.'; report(error); }
+  finally { $('rescan').disabled = false; }
+}
+$('link-form').addEventListener('submit', event => { event.preventDefault(); inspect(); });
+$('url').addEventListener('input', () => {
+  ++request; $('metadata-loading').hidden = true; $('inspect').disabled = false;
+  clearTimeout(pasteTimer); resetVideo();
+  $('link-hint').textContent = 'Paste a link to choose quality and subtitles.';
+});
+$('url').addEventListener('paste', () => { clearTimeout(pasteTimer); pasteTimer = setTimeout(inspect, 350); });
+$('clear-video').onclick = () => { ++request; resetVideo(); $('url').value = ''; $('url').focus(); };
+$('quality').onchange = updateDownloadButton;
+$('subtitle').onchange = updateDownloadButton;
+$('download').onclick = addDownload;
+$('pause').onclick = () => queueAction(queue.paused ? 'resume' : 'pause');
+$('clear-history').onclick = () => queueAction('clear');
+$('choose-folder').onclick = () => invoke('choose_folder').catch(report);
+$('open-folder').onclick = () => invoke('reveal_folder', { id: null }).catch(report);
+$('settings-button').onclick = () => { showSetup(); scan(); };
+$('rescan').onclick = scan;
+$('continue').onclick = async () => {
+  try { await invoke('complete_setup'); queue.setupComplete = true; showDownloads(); $('url').focus(); }
+  catch (error) { report(error); }
+};
+$('setup-back').onclick = showDownloads;
+$('quit').onclick = () => invoke('quit_app').catch(report);
+$('copy-command').onclick = () => navigator.clipboard.writeText($('install-command').textContent).then(() => toast('Install command copied.')).catch(() => toast('Select and copy the command above.'));
+document.addEventListener('keydown', event => { if (event.key === 'Escape' && platform === 'macos') invoke('dismiss').catch(report); });
+async function start() {
+  await listen('queue-changed', event => { queue = event.payload; renderQueue(); });
+  await listen('app-error', event => report(event.payload));
+  await listen('panel-open', () => {
+    animateEntry($('app'), 'var(--panel-origin, 80%) top');
+    if (!video && !$('downloads').hidden) setTimeout(() => $('url').focus(), 150);
+  });
+  const initial = await invoke('bootstrap');
+  queue = initial.queue; platform = initial.platform;
+  document.body.dataset.platform = platform;
+  if (queue.setupComplete) showDownloads(); else { showSetup(); await scan(); }
+}
+start().catch(report);

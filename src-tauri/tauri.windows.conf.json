@@ -1,0 +1,4 @@
+{
+  "app": { "windows": [{ "label": "main", "title": "YT Down", "width": 520, "height": 780, "minWidth": 420, "minHeight": 600, "visible": true, "resizable": true, "decorations": true, "skipTaskbar": false, "alwaysOnTop": false, "center": true }] },
+  "bundle": { "targets": ["nsis"], "windows": { "nsis": { "displayLanguageSelector": false }, "webviewInstallMode": { "type": "downloadBootstrapper", "silent": true } } }
+}

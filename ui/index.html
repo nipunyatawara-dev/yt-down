@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>YT Down</title><link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <header class="topbar">
+    <div class="brand"><span class="app-mark" aria-hidden="true">↓</span><span>YT Down</span></div>
+    <div class="header-actions"><span id="activity" class="activity">Ready</span><button id="settings-button" class="icon-button" title="Setup and settings" aria-label="Setup and settings">⚙</button></div>
+  </header>
+  <main>
+    <section id="setup" hidden>
+      <div class="intro"><div class="large-mark" aria-hidden="true">↓</div><h1>Ready for downloads.</h1><p>Checking the tools that make your downloads work.</p></div>
+      <div id="dependencies" class="dependency-list" aria-live="polite"></div>
+      <div id="install-help" class="install-help" hidden><p>Install missing tools in Terminal or PowerShell, then check again.</p><pre id="install-command"></pre><button id="copy-command" class="text-button">Copy command</button><p class="small">Restart the app after installing so it can find new tools.</p></div>
+      <div class="setup-actions"><button id="rescan" class="secondary">Check again</button><button id="continue" class="primary" disabled>Continue</button></div>
+      <div class="settings-bottom"><button id="setup-back" class="text-button" hidden>Back to downloads</button><button id="quit" class="text-button danger">Quit YT Down</button></div>
+    </section>
+    <section id="downloads" hidden>
+      <section class="composer" aria-label="New download">
+        <div class="section-heading"><h1>New download</h1><span class="hint">Video, audio, and subtitles</span></div>
+        <form id="link-form"><label for="url">Video link</label><div class="link-input"><input id="url" type="url" placeholder="Paste a YouTube link" autocomplete="off" spellcheck="false" required aria-describedby="link-hint"><button id="inspect" type="submit" class="fetch-button" aria-label="Load video">↗</button></div><p id="link-hint" class="small">Paste a link to choose quality and subtitles.</p></form>
+        <div id="metadata-loading" class="loading" hidden><span class="spinner"></span><span>Getting video details…</span></div>
+        <section id="video-card" class="video-card" hidden>
+          <div class="video-summary"><img id="thumbnail" alt="Video thumbnail"><div><h2 id="video-title"></h2><p id="video-byline"></p></div><button id="clear-video" class="icon-button" aria-label="Clear selected video" title="Clear">×</button></div>
+          <div class="field"><label for="quality">Download</label><select id="quality"></select></div>
+          <div class="field"><label for="subtitle">Subtitles</label><select id="subtitle"><option value="">None</option></select><p id="subtitle-note" class="small"></p></div>
+          <button id="download" class="primary download-button"><span id="download-label">Download</span><span aria-hidden="true">↓</span></button>
+        </section>
+      </section>
+      <div class="folder-row"><span aria-hidden="true">▱</span><button id="choose-folder" title="Choose download folder"></button><button id="open-folder" class="icon-button" aria-label="Open download folder" title="Open folder">↗</button></div>
+      <section class="queue-section" aria-label="Download queue"><div class="queue-heading"><div><h2>Your queue <span id="queue-count">0</span></h2><p id="queue-description">One at a time. In your order.</p></div><div class="queue-controls"><button id="clear-history" class="text-button" hidden>Clear finished</button><button id="pause" class="mini-button" hidden>Pause queue</button></div></div>
+        <div id="queue" aria-live="off"></div><div id="empty" class="empty"><span class="empty-icon" aria-hidden="true">≡</span><p>Your queue is empty.</p><span>Add a video and it will appear in your queue.</span></div>
+      </section>
+    </section>
+  </main>
+  <footer><span id="footer-status"></span><span class="version">v0.1</span></footer>
+</div>
+<div id="toast" role="status" hidden></div>
+<script src="app.js"></script>
+</body></html>

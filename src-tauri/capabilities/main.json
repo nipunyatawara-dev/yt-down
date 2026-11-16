@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "main-window",
+  "description": "Local app event listeners for queue and panel updates",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}
