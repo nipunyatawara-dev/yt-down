@@ -1,6 +1,6 @@
 # YT Down · macOS
 
-A compact menu bar downloader with a Rust engine and a Tauri system webview. Click the download arrow in the menu bar to open the panel. Downloads continue when the panel is dismissed. There is no Dock window.
+A compact menu bar downloader with a Rust engine and a Tauri system webview. Click the download arrow in the menu bar to open a compact AppKit NSPopover, anchored to its NSStatusItem. AppKit owns the arrow, window chrome, opening animation, and click-away dismissal. The webview is hosted inside the popover while its Tauri backing window stays hidden. Downloads continue when the popover closes.
 
 ## Download
 
@@ -12,7 +12,7 @@ The queue runs one download at a time. Move waiting items up or down, cancel, re
 
 ## First launch
 
-The setup screen checks executable paths and versions, including Homebrew paths when launched from Finder.
+The first-launch setup checks executable paths and versions, including Homebrew paths when launched from Finder. A successful scan is saved immediately, even if the user closes the popover before pressing Done. Later launches open to downloads and check tools in the background. Missing tools trigger a macOS UserNotifications alert and a warning inside the popover. Notification delivery follows the user’s macOS notification permissions. Settings shows cached tool status, with Check Again available explicitly.
 
 ```sh
 brew install yt-dlp ffmpeg deno
@@ -29,7 +29,6 @@ Requires Rust stable, Node.js 22+, npm, and the Xcode command-line tools. The UI
 ```sh
 npm ci
 npm run dev
-npm test
 npm run build
 ```
 
@@ -44,8 +43,8 @@ Bundles are written under `src-tauri/target/`. The local builds are ad-hoc signe
 
 ## Platform branches
 
-- `macos` is the menu bar app, with an anchored panel, click-away dismissal, and accessory activation.
-- `windows` is the desktop app, with a normal resizable window, taskbar entry, and NSIS installer. Its GitHub workflow builds and tests on Windows.
+- `macos` is the menu bar app, with an AppKit NSPopover, click-away dismissal, and accessory activation.
+- `windows` is the desktop app, with a normal resizable window, taskbar entry, and NSIS installer. Its GitHub workflow builds on Windows.
 
 Both branches keep the Rust engine and UI compatible with either platform. Platform-specific Tauri configuration and Rust conditionals provide the native behavior. The default configuration and build instructions on each branch target its platform.
 
