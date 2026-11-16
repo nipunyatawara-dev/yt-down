@@ -6,7 +6,7 @@ mod media;
 mod model;
 mod queue;
 
-use model::{Job, Queue, Status, Video};
+use model::{Job, Queue, Status, Video, VideoCodec, VideoContainer};
 use queue::Engine;
 use serde::Serialize;
 use std::sync::{atomic::Ordering, Arc};
@@ -99,7 +99,8 @@ fn resize_panel(app: tauri::AppHandle, height: f64) {
 
 #[tauri::command]
 async fn inspect_video(url: String, state: State<'_, Arc<Engine>>) -> Result<Video, String> {
-    let video = media::fetch(&url).await?;
+    let codec = state.queue.lock().unwrap().video_codec;
+    let video = media::fetch(&url, codec).await?;
     let mut cache = state.metadata.lock().unwrap();
     if cache.len() >= 20 {
         cache.clear();
@@ -148,12 +149,16 @@ fn enqueue(
         return Err("Select a subtitle language to download.".into());
     }
     let mut queue = state.queue.lock().unwrap();
+    if !matches!(format.as_str(), "mp3" | "subtitles") && video.video_codec != queue.video_codec {
+        return Err("Video codec settings changed. Load the link again before downloading.".into());
+    }
     let previous = queue.clone();
     let job = Job {
         id: uuid::Uuid::new_v4().to_string(),
         video,
         format,
         quality_label,
+        container: queue.video_container,
         subtitle,
         folder: queue.folder.clone(),
         status: Status::Queued,
@@ -252,6 +257,27 @@ fn queue_action(
 }
 
 #[tauri::command]
+fn save_preferences(
+    app: tauri::AppHandle,
+    state: State<Arc<Engine>>,
+    container: VideoContainer,
+    codec: VideoCodec,
+) -> Result<Queue, String> {
+    let mut queue = state.queue.lock().unwrap();
+    let previous = queue.clone();
+    queue.video_container = container;
+    queue.video_codec = codec;
+    if let Err(error) = state.save(&queue) {
+        *queue = previous;
+        return Err(error);
+    }
+    let result = queue.clone();
+    drop(queue);
+    state.publish(&app);
+    Ok(result)
+}
+
+#[tauri::command]
 async fn complete_setup(
     app: tauri::AppHandle,
     state: State<'_, Arc<Engine>>,
@@ -291,7 +317,7 @@ async fn choose_folder(
         .await;
     state.dialog_open.store(false, Ordering::Relaxed);
     #[cfg(target_os = "macos")]
-    macos::show(&app);
+    macos::restore(&app);
     #[cfg(not(target_os = "macos"))]
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
@@ -433,6 +459,7 @@ fn main() {
             enqueue,
             queue_action,
             complete_setup,
+            save_preferences,
             choose_folder,
             reveal_folder,
             dismiss,

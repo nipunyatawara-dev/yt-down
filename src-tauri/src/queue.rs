@@ -206,7 +206,7 @@ impl Engine {
                     };
                     item.speed = value["speed"]
                         .as_f64()
-                        .map(|n| format!("{:.1} MB/s", n / 1_000_000.0))
+                        .map(format_speed)
                         .unwrap_or_default();
                     item.eta = value["eta"]
                         .as_f64()
@@ -233,6 +233,19 @@ impl Engine {
             });
         }
     }
+}
+
+fn format_speed(bytes: f64) -> String {
+    let (amount, unit) = if bytes >= 1_000_000_000.0 {
+        (bytes / 1_000_000_000.0, "GB")
+    } else if bytes >= 1_000_000.0 {
+        (bytes / 1_000_000.0, "MB")
+    } else if bytes >= 1_000.0 {
+        (bytes / 1_000.0, "KB")
+    } else {
+        (bytes, "B")
+    };
+    format!("{amount:.1} {unit}/s")
 }
 
 async fn terminate_tree(child: &mut tokio::process::Child) {
@@ -266,6 +279,7 @@ mod tests {
             channel: "channel".into(),
             duration: 1.0,
             thumbnail: "".into(),
+            video_codec: crate::model::VideoCodec::Auto,
             qualities: vec![],
             subtitles: vec![],
         };
@@ -274,6 +288,7 @@ mod tests {
             video: v,
             format: "mp3".into(),
             quality_label: "MP3".into(),
+            container: crate::model::VideoContainer::Mp4,
             subtitle: None,
             folder: "test".into(),
             status: Status::Processing,

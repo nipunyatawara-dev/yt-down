@@ -1,6 +1,6 @@
 [package]
 name = "yt-down"
-version = "0.2.0"
+version = "0.2.1"
 description = "A small, queued YouTube downloader"
 authors = ["Nipun Yatawara"]
 edition = "2021"

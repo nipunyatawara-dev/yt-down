@@ -1,6 +1,6 @@
 use crate::{
     dependencies,
-    model::{Job, Quality, Subtitle, Video},
+    model::{Job, Quality, Subtitle, Video, VideoCodec, VideoContainer},
 };
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -45,7 +45,7 @@ pub fn canonical_url(input: &str) -> Result<String, String> {
     Ok(format!("https://www.youtube.com/watch?v={id}"))
 }
 
-pub async fn fetch(input: &str) -> Result<Video, String> {
+pub async fn fetch(input: &str, codec: VideoCodec) -> Result<Video, String> {
     let url = canonical_url(input)?;
     let mut cmd = dependencies::downloader()?;
     let output = tokio::time::timeout(
@@ -62,10 +62,10 @@ pub async fn fetch(input: &str) -> Result<Video, String> {
     }
     let data: Value = serde_json::from_slice(&output.stdout)
         .map_err(|_| "yt-dlp returned invalid video information.")?;
-    parse_metadata(&data, url)
+    parse_metadata(&data, url, codec)
 }
 
-pub fn parse_metadata(data: &Value, url: String) -> Result<Video, String> {
+pub fn parse_metadata(data: &Value, url: String, codec: VideoCodec) -> Result<Video, String> {
     if data["is_live"].as_bool() == Some(true) {
         return Err("Live broadcasts can be downloaded after they finish.".into());
     }
@@ -78,6 +78,13 @@ pub fn parse_metadata(data: &Value, url: String) -> Result<Video, String> {
             || format["vcodec"] == "none"
             || !matches!(protocol, "https" | "http")
             || format["has_drm"].as_bool() == Some(true)
+        {
+            continue;
+        }
+        if codec == VideoCodec::Av1
+            && !format["vcodec"]
+                .as_str()
+                .is_some_and(|v| v.starts_with("av01") || v.starts_with("av1"))
         {
             continue;
         }
@@ -107,7 +114,7 @@ pub fn parse_metadata(data: &Value, url: String) -> Result<Video, String> {
             },
         );
     }
-    if qualities.is_empty() {
+    if qualities.is_empty() && codec == VideoCodec::Auto {
         return Err(
             "No downloadable video formats were found. Update yt-dlp and try again.".into(),
         );
@@ -163,6 +170,7 @@ pub fn parse_metadata(data: &Value, url: String) -> Result<Video, String> {
             .into(),
         duration: data["duration"].as_f64().unwrap_or(0.0),
         thumbnail,
+        video_codec: codec,
         qualities: qualities.into_values().rev().collect(),
         subtitles,
     })
@@ -194,7 +202,17 @@ pub fn download_args(job: &Job) -> Vec<String> {
     .map(String::from)
     .collect();
     args.push(job.folder.clone());
-    args.extend(["-o".into(), "%(title).160B [%(id)s].%(ext)s".into()]);
+    let codec_suffix = if job.video.video_codec == VideoCodec::Av1
+        && !matches!(job.format.as_str(), "mp3" | "subtitles")
+    {
+        " [AV1]"
+    } else {
+        ""
+    };
+    args.extend([
+        "-o".into(),
+        format!("%(title).160B [%(id)s]{codec_suffix}.%(ext)s"),
+    ]);
     match job.format.as_str() {
         "mp3" => args.extend(
             [
@@ -209,12 +227,21 @@ pub fn download_args(job: &Job) -> Vec<String> {
             .map(String::from),
         ),
         "subtitles" => args.push("--skip-download".into()),
-        format => args.extend([
-            "-f".into(),
-            format!("{format}+bestaudio/{format}"),
-            "--merge-output-format".into(),
-            "mkv".into(),
-        ]),
+        format => {
+            let selection = if job.container == VideoContainer::Mp4 {
+                format!("{format}+bestaudio[ext=m4a]/{format}+bestaudio/{format}")
+            } else {
+                format!("{format}+bestaudio/{format}")
+            };
+            args.extend([
+                "-f".into(),
+                selection,
+                "--merge-output-format".into(),
+                job.container.extension().into(),
+                "--remux-video".into(),
+                job.container.extension().into(),
+            ]);
+        }
     }
     if let Some(subtitle) = &job.subtitle {
         args.extend(
@@ -267,9 +294,12 @@ mod tests {
     #[ignore = "requires YouTube access and installed yt-dlp/FFmpeg/Deno"]
     async fn live_downloads_video_mp3_and_subtitles() {
         use crate::model::{Status, Subtitle};
-        let video = fetch("https://www.youtube.com/watch?v=jNQXAC9IVRw")
-            .await
-            .unwrap();
+        let video = fetch(
+            "https://www.youtube.com/watch?v=jNQXAC9IVRw",
+            VideoCodec::Auto,
+        )
+        .await
+        .unwrap();
         let folder = std::env::temp_dir().join(format!("yt-down-smoke-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&folder).unwrap();
         let mut job = Job {
@@ -277,6 +307,7 @@ mod tests {
             video: video.clone(),
             format: video.qualities.last().unwrap().id.clone(),
             quality_label: "Test".into(),
+            container: VideoContainer::Mp4,
             subtitle: None,
             folder: folder.to_string_lossy().into(),
             status: Status::Queued,
@@ -315,9 +346,12 @@ mod tests {
             .unwrap()
             .flatten()
             .any(|f| f.path().extension().is_some_and(|e| e == "mp3")));
-        let captions = fetch("https://www.youtube.com/watch?v=fwqEB2HdY88")
-            .await
-            .unwrap();
+        let captions = fetch(
+            "https://www.youtube.com/watch?v=fwqEB2HdY88",
+            VideoCodec::Auto,
+        )
+        .await
+        .unwrap();
         let sub: Subtitle = captions
             .subtitles
             .iter()
@@ -369,7 +403,7 @@ mod tests {
             {"format_id":"b","height":2160,"fps":25,"vcodec":"av1","protocol":"https"},
             {"format_id":"c","height":1080,"fps":60,"vcodec":"avc1","protocol":"https"}
         ], "subtitles":{"en":[{"ext":"vtt","name":"English"}]},"automatic_captions":{"en":[{"ext":"vtt","name":"English"}],"ta":[{"ext":"vtt","name":"Tamil"}]}});
-        let video = parse_metadata(&data, "test".into()).unwrap();
+        let video = parse_metadata(&data, "test".into(), VideoCodec::Auto).unwrap();
         assert_eq!(video.qualities.len(), 2);
         assert_eq!(video.qualities[0].id, "b");
         assert_eq!(video.subtitles.len(), 3);

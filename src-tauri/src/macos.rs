@@ -115,13 +115,24 @@ pub fn install(app: &tauri::AppHandle) -> tauri::Result<()> {
 }
 
 pub fn show(app: &tauri::AppHandle) {
+    present(app, false);
+}
+
+pub fn restore(app: &tauri::AppHandle) {
+    present(app, true);
+}
+
+fn present(app: &tauri::AppHandle, preserve_view: bool) {
     let app = app.clone();
     let dispatcher = app.clone();
     let _ = dispatcher.run_on_main_thread(move || {
         MENU_BAR.with(|state| {
             if let Some(menu) = state.borrow().as_ref() {
                 menu.show(MainThreadMarker::new().unwrap());
-                let _ = app.emit("panel-open", ());
+                let _ = app.emit(
+                    "panel-open",
+                    serde_json::json!({ "preserveView": preserve_view }),
+                );
             }
         });
     });
