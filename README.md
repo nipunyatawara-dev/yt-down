@@ -1,6 +1,6 @@
-# YT Down · macOS
+# YT Down · Windows
 
-A compact menu bar downloader with a Rust engine and a Tauri system webview. Click the download arrow in the menu bar to open the panel. Downloads continue when the panel is dismissed. There is no Dock window.
+A compact Windows desktop downloader with a Rust engine and a Tauri system webview. Open the app from Start or the taskbar. Keep its resizable window open or minimized while downloads run. The app asks you to finish or cancel the active download before closing.
 
 ## Download
 
@@ -12,19 +12,21 @@ The queue runs one download at a time. Move waiting items up or down, cancel, re
 
 ## First launch
 
-The setup screen checks executable paths and versions, including Homebrew paths when launched from Finder.
+The setup screen checks executable paths and versions, including PATH, WinGet portable packages, Scoop, and Chocolatey.
 
-```sh
-brew install yt-dlp ffmpeg deno
+```powershell
+winget install --id yt-dlp.yt-dlp -e
+winget install --id Gyan.FFmpeg -e
+winget install --id DenoLand.Deno -e
 ```
 
-FFmpeg includes ffprobe. Deno handles YouTube's JavaScript challenges. Tools are detected on the computer and are not bundled or silently installed. An existing Homebrew installation is needed to use the command above. Restart the app after installing new dependencies.
+FFmpeg includes ffprobe. Deno handles YouTube's JavaScript challenges. Tools are detected on the computer and are not bundled or silently installed. Windows App Installer provides the winget command. Restart the app after installing new dependencies.
 
-Choose the save folder with the folder row below the composer. It defaults to `~/Downloads/YT Down`. Each queued item remembers the folder chosen when it was added.
+Choose the save folder with the folder row below the composer. It defaults to `%USERPROFILE%\Downloads\YT Down`. Each queued item remembers the folder chosen when it was added.
 
 ## Develop and build
 
-Requires Rust stable, Node.js 22+, npm, and the Xcode command-line tools. The UI uses plain HTML/CSS/JavaScript without a frontend framework or production Node runtime.
+Requires Rust stable, Node.js 22+, npm, and Visual Studio Build Tools with Desktop development with C++. WebView2 is supplied by Windows or installed by the NSIS installer. The UI uses plain HTML/CSS/JavaScript without a frontend framework or production Node runtime.
 
 ```sh
 npm ci
@@ -33,14 +35,14 @@ npm test
 npm run build
 ```
 
-Build for both Apple Silicon and Intel Macs with the installed Rust target.
+Build the x64 Windows installer.
 
 ```sh
-rustup target add x86_64-apple-darwin
-npm run build:mac
+rustup target add x86_64-pc-windows-msvc
+npm run build:windows
 ```
 
-Bundles are written under `src-tauri/target/`. The local builds are ad-hoc signed, without Apple notarization. macOS may require Open Anyway in Privacy & Security when installed from a downloaded archive.
+Bundles are written under `src-tauri/target/`. The Windows installer is unsigned. Windows SmartScreen may show an unknown-publisher prompt. The Windows build workflow runs native tests and uploads an NSIS installer as an artifact.
 
 ## Platform branches
 
