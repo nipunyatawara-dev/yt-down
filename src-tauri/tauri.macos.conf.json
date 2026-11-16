@@ -1,0 +1,16 @@
+{
+  "app": {
+    "macOSPrivateApi": true,
+    "windows": [{
+      "label": "main", "title": "YT Down", "width": 360, "height": 460,
+      "minWidth": 360, "minHeight": 300, "visible": false, "focus": false,
+      "resizable": false, "decorations": false, "skipTaskbar": true,
+      "alwaysOnTop": false, "shadow": false,
+      "transparent": true, "backgroundColor": "#00000000"
+    }]
+  },
+  "bundle": {
+    "targets": ["app", "dmg"],
+    "macOS": { "minimumSystemVersion": "12.0", "infoPlist": "Info.plist", "signingIdentity": "-" }
+  }
+}
