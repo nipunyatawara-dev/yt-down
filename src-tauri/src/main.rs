@@ -1,5 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 mod dependencies;
+#[cfg(target_os = "macos")]
+mod macos;
 mod media;
 mod model;
 mod queue;
@@ -15,6 +17,8 @@ use tauri::{Emitter, Manager, State};
 struct Bootstrap {
     queue: Queue,
     platform: String,
+    first_launch: bool,
+    dependencies: Option<Vec<dependencies::Dependency>>,
 }
 
 #[tauri::command]
@@ -22,12 +26,75 @@ fn bootstrap(state: State<Arc<Engine>>) -> Bootstrap {
     Bootstrap {
         queue: state.queue.lock().unwrap().clone(),
         platform: std::env::consts::OS.into(),
+        first_launch: state.first_launch,
+        dependencies: state.dependencies.lock().unwrap().clone(),
     }
 }
 
 #[tauri::command]
-async fn scan_dependencies() -> Vec<dependencies::Dependency> {
-    dependencies::scan().await
+async fn scan_dependencies(
+    app: tauri::AppHandle,
+    state: State<'_, Arc<Engine>>,
+) -> Result<Vec<dependencies::Dependency>, String> {
+    check_dependencies(&app, &state, false).await
+}
+
+async fn check_dependencies(
+    app: &tauri::AppHandle,
+    engine: &Engine,
+    background: bool,
+) -> Result<Vec<dependencies::Dependency>, String> {
+    #[cfg(not(target_os = "macos"))]
+    use tauri_plugin_notification::NotificationExt;
+    let result = dependencies::scan().await;
+    let missing: Vec<_> = result
+        .iter()
+        .filter(|d| d.required && d.version.is_none())
+        .map(|d| d.name.as_str())
+        .collect();
+    if missing.is_empty() {
+        let mut queue = engine.queue.lock().unwrap();
+        if !queue.setup_complete {
+            let previous = queue.clone();
+            queue.setup_complete = true;
+            if let Err(error) = engine.save(&queue) {
+                *queue = previous;
+                return Err(error);
+            }
+        }
+    } else if background {
+        let message = format!(
+            "Missing tools: {}. Open YT Down → Settings to restore them.",
+            missing.join(", ")
+        );
+        #[cfg(target_os = "macos")]
+        macos::notify_missing(app, message.clone());
+        #[cfg(not(target_os = "macos"))]
+        if let Err(error) = app
+            .notification()
+            .builder()
+            .title("YT Down needs a dependency")
+            .body(&message)
+            .show()
+        {
+            let _ = app.emit(
+                "app-error",
+                format!("{message} Notification delivery failed: {error}"),
+            );
+        }
+    }
+    *engine.dependencies.lock().unwrap() = Some(result.clone());
+    engine.publish(app);
+    let _ = app.emit("dependencies-checked", &result);
+    Ok(result)
+}
+
+#[tauri::command]
+fn resize_panel(app: tauri::AppHandle, height: f64) {
+    #[cfg(target_os = "macos")]
+    macos::resize(&app, height);
+    #[cfg(not(target_os = "macos"))]
+    let _ = (app, height);
 }
 
 #[tauri::command]
@@ -185,10 +252,27 @@ fn queue_action(
 }
 
 #[tauri::command]
-fn complete_setup(state: State<Arc<Engine>>) -> Result<(), String> {
-    let mut queue = state.queue.lock().unwrap();
-    queue.setup_complete = true;
-    state.save(&queue)
+async fn complete_setup(
+    app: tauri::AppHandle,
+    state: State<'_, Arc<Engine>>,
+) -> Result<(), String> {
+    #[cfg(not(target_os = "macos"))]
+    use tauri_plugin_notification::NotificationExt;
+    {
+        let mut queue = state.queue.lock().unwrap();
+        let previous = queue.clone();
+        queue.setup_complete = true;
+        if let Err(error) = state.save(&queue) {
+            *queue = previous;
+            return Err(error);
+        }
+    }
+    // Ask once during setup so later missing-tool alerts can be delivered by macOS.
+    #[cfg(target_os = "macos")]
+    macos::request_notification_permission(&app);
+    #[cfg(not(target_os = "macos"))]
+    let _ = app.notification().request_permission();
+    Ok(())
 }
 
 #[tauri::command]
@@ -198,12 +282,17 @@ async fn choose_folder(
 ) -> Result<Option<String>, String> {
     state.dialog_open.store(true, Ordering::Relaxed);
     let current = state.queue.lock().unwrap().folder.clone();
+    #[cfg(target_os = "macos")]
+    macos::close(&app);
     let result = rfd::AsyncFileDialog::new()
         .set_title("Save downloads to")
         .set_directory(current)
         .pick_folder()
         .await;
     state.dialog_open.store(false, Ordering::Relaxed);
+    #[cfg(target_os = "macos")]
+    macos::show(&app);
+    #[cfg(not(target_os = "macos"))]
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
         let _ = window.set_focus();
@@ -252,9 +341,7 @@ async fn reveal_folder(state: State<'_, Arc<Engine>>, id: Option<String>) -> Res
 #[tauri::command]
 fn dismiss(app: tauri::AppHandle) {
     #[cfg(target_os = "macos")]
-    if let Some(window) = app.get_webview_window("main") {
-        let _ = window.hide();
-    }
+    macos::close(&app);
     #[cfg(not(target_os = "macos"))]
     let _ = app;
 }
@@ -269,47 +356,18 @@ fn quit_app(app: tauri::AppHandle, state: State<Arc<Engine>>) -> Result<(), Stri
     {
         return Err("Cancel the current download before quitting. You can close the panel while it finishes.".into());
     }
-    queue.paused = true;
+    queue.paused = queue.jobs.iter().any(|job| job.status == Status::Queued);
     state.save(&queue)?;
     app.exit(0);
     Ok(())
 }
 
-#[cfg(target_os = "macos")]
-fn show_panel(app: &tauri::AppHandle) {
-    if let Some(window) = app.get_webview_window("main") {
-        if let Some(tray) = app.tray_by_id("main-tray") {
-            if let Ok(Some(rect)) = tray.rect() {
-                let scale = window.scale_factor().unwrap_or(1.0);
-                let pos = rect.position.to_physical::<f64>(scale);
-                let size = rect.size.to_physical::<f64>(scale);
-                if let Ok(Some(monitor)) = window.monitor_from_point(pos.x, pos.y) {
-                    let scale = monitor.scale_factor();
-                    let area = monitor.work_area();
-                    let width = 460.0 * scale;
-                    let height = (720.0 * scale).min(area.size.height as f64 - 16.0 * scale);
-                    let x = (pos.x + size.width / 2.0 - width / 2.0).clamp(
-                        area.position.x as f64 + 8.0 * scale,
-                        area.position.x as f64 + area.size.width as f64 - width - 8.0 * scale,
-                    );
-                    let y = (pos.y + size.height + 6.0 * scale)
-                        .max(area.position.y as f64 + 6.0 * scale);
-                    let _ = window.set_size(tauri::PhysicalSize::new(width, height));
-                    let _ = window.set_position(tauri::PhysicalPosition::new(x, y));
-                }
-            }
-        }
-        let _ = window.show();
-        let _ = window.set_focus();
-        let _ = window.emit("panel-open", ());
-    }
-}
-
 fn main() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_single_instance::init(|app, _, _| {
             #[cfg(target_os = "macos")]
-            show_panel(app);
+            macos::show(app);
             #[cfg(not(target_os = "macos"))]
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.show();
@@ -323,54 +381,19 @@ fn main() {
             app.manage(state.clone());
             #[cfg(target_os = "macos")]
             {
-                use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
                 app.set_activation_policy(tauri::ActivationPolicy::Accessory);
-                let icon = tauri::image::Image::from_bytes(include_bytes!("../icons/tray.png"))?;
-                TrayIconBuilder::with_id("main-tray")
-                    .icon(icon)
-                    .icon_as_template(true)
-                    .tooltip("YT Down")
-                    .show_menu_on_left_click(false)
-                    .on_tray_icon_event(|tray, event| {
-                        if let TrayIconEvent::Click {
-                            button: MouseButton::Left,
-                            button_state: MouseButtonState::Up,
-                            ..
-                        } = event
-                        {
-                            if let Some(window) = tray.app_handle().get_webview_window("main") {
-                                if window.is_visible().unwrap_or(false) {
-                                    let _ = window.hide();
-                                } else {
-                                    show_panel(tray.app_handle());
-                                }
-                            }
-                        }
-                    })
-                    .build(app)?;
-                let window = app.get_webview_window("main").unwrap();
-                let handle = app.handle().clone();
-                let engine = state.clone();
-                window.on_window_event(move |event| {
-                    if let tauri::WindowEvent::Focused(false) = event {
-                        if !engine.dialog_open.load(Ordering::Relaxed) {
-                            let handle = handle.clone();
-                            let engine = engine.clone();
-                            tauri::async_runtime::spawn(async move {
-                                tokio::time::sleep(std::time::Duration::from_millis(160)).await;
-                                if let Some(window) = handle.get_webview_window("main") {
-                                    if !window.is_focused().unwrap_or(true)
-                                        && !engine.dialog_open.load(Ordering::Relaxed)
-                                    {
-                                        let _ = window.hide();
-                                    }
-                                }
-                            });
-                        }
-                    }
-                });
-                // First launch stays in the menu bar. Opening the icon starts dependency scanning.
+                macos::install(app.handle())?;
             }
+            let dependency_handle = app.handle().clone();
+            let dependency_state = state.clone();
+            tauri::async_runtime::spawn(async move {
+                let background = !dependency_state.first_launch;
+                if let Err(error) =
+                    check_dependencies(&dependency_handle, &dependency_state, background).await
+                {
+                    let _ = dependency_handle.emit("app-error", error);
+                }
+            });
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(state.run(handle));
             Ok(())
@@ -380,7 +403,7 @@ fn main() {
                 #[cfg(target_os = "macos")]
                 {
                     api.prevent_close();
-                    let _ = window.hide();
+                    macos::close(window.app_handle());
                 }
                 #[cfg(not(target_os = "macos"))]
                 {
@@ -404,6 +427,7 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             bootstrap,
+            resize_panel,
             scan_dependencies,
             inspect_video,
             enqueue,

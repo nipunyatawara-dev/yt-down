@@ -20,6 +20,8 @@ function animateEntry(node, origin = 'center top') {
 document.addEventListener('keydown', () => { keyboardInput = true; document.body.classList.add('keyboard'); });
 document.addEventListener('pointerdown', () => { keyboardInput = false; document.body.classList.remove('keyboard'); });
 let deps = [];
+let hasOpened = false;
+let startupReady = false;
 const jobNodes = new Map();
 
 function toast(message, error = false) {
@@ -53,10 +55,10 @@ function resetVideo() {
 function updateDownloadButton() {
   const format = $('quality').value;
   const pending = queue.jobs.some(j => ['queued', 'downloading', 'processing'].includes(j.status));
-  $('download-label').textContent = pending || queue.paused ? 'Add to queue' : format === 'subtitles' ? 'Download subtitles' : format === 'mp3' ? 'Download MP3' : 'Download video';
+  $('download-label').textContent = pending || queue.paused ? 'Add to Queue' : format === 'subtitles' ? 'Download subtitles' : format === 'mp3' ? 'Download MP3' : 'Download';
   $('download').disabled = adding || !video || (format === 'subtitles' && !$('subtitle').value);
   const sub = video?.subtitles.find(s => s.id === $('subtitle').value);
-  $('subtitle-note').textContent = sub ? (sub.automatic ? 'Automatic captions may include errors. Saved as an SRT file.' : 'Creator-provided captions. Saved as an SRT file.') : (video && !video.subtitles.length ? 'No subtitles are available for this video.' : 'Optional. Video subtitles are also embedded in the MKV.');
+  $('subtitle-note').textContent = sub ? (sub.automatic ? 'Auto-generated · SRT' : 'Creator-provided · SRT') : (video && !video.subtitles.length ? 'No subtitles are available for this video.' : '');
 }
 async function inspect() {
   const url = $('url').value.trim();
@@ -66,7 +68,7 @@ async function inspect() {
   resetVideo();
   $('metadata-loading').hidden = false;
   $('inspect').disabled = true;
-  $('link-hint').textContent = 'Looking up available formats and languages…';
+  $('link-hint').textContent = 'Loading available formats and languages…';
   try {
     const result = await invoke('inspect_video', { url });
     if (current !== request) return;
@@ -102,7 +104,7 @@ async function inspect() {
     }
     $('video-card').hidden = false;
     animateEntry($('video-card'));
-    $('link-hint').textContent = 'Choose what you want to save below.';
+    $('link-hint').textContent = 'Select a format and optional subtitles.';
     updateDownloadButton();
   } catch (error) {
     if (current === request) { $('link-hint').textContent = 'Could not load this video. Check the link and try again.'; report(error); }
@@ -120,7 +122,7 @@ async function addDownload() {
     ++request;
     resetVideo();
     $('url').value = '';
-    $('link-hint').textContent = 'Added. Paste another link to keep your queue going.';
+    $('link-hint').textContent = 'Added to queue. Paste another link.';
     renderQueue();
     $('url').focus();
     toast(queue.paused ? 'Added to your paused queue.' : 'Added to your queue.');
@@ -167,14 +169,14 @@ function renderQueue() {
   $('activity').textContent = active ? 'Downloading' : queue.paused ? 'Paused' : 'Ready';
   $('activity').classList.toggle('running', !!active);
   $('pause').hidden = !active && !pending.length;
-  $('pause').textContent = queue.paused ? 'Resume queue' : 'Pause queue';
+  $('pause').textContent = queue.paused ? 'Resume' : 'Pause';
   $('pause').title = 'Pause holds the next download. The current download keeps running.';
   $('clear-history').hidden = !finished.length;
-  $('queue-description').textContent = queue.paused ? 'Queue paused. Resume when you’re ready.' : active ? `${pending.length} waiting · Downloading one at a time` : 'One at a time. In your order.';
+  $('queue-description').textContent = queue.paused ? 'Queue paused. Resume when you’re ready.' : active ? `${pending.length} waiting · Downloading one at a time` : 'Downloads run one at a time.';
   $('empty').hidden = queue.jobs.length > 0;
   $('choose-folder').textContent = queue.folder.replace(/^\/Users\/[^/]+\//, '~/');
   $('choose-folder').title = `Save to ${queue.folder}. Click to change.`;
-  $('footer-status').textContent = active ? 'Downloads continue while this panel is closed.' : '';
+  $('footer-status').textContent = active ? 'Downloading in the background' : '';
   if (platform !== 'macos' && active) $('footer-status').textContent = 'Keep the app open while downloading.';
   const ordered = [...(active ? [active] : []), ...pending, ...finished.slice().reverse()];
   const ids = new Set(ordered.map(j => j.id));
@@ -215,33 +217,40 @@ function renderQueue() {
 }
 function showSetup() { $('setup').hidden = false; $('downloads').hidden = true; $('setup-back').hidden = !queue.setupComplete; }
 function showDownloads() { $('setup').hidden = true; $('downloads').hidden = false; renderQueue(); }
+function renderDependencies(results) {
+  deps = results;
+  $('dependencies').replaceChildren();
+  deps.forEach(dep => {
+    const row = element('div', 'dependency');
+    const state = element('span', `dependency-state${dep.version ? '' : ' missing'}`, dep.version ? '✓' : '!');
+    const info = element('div', 'dependency-info');
+    info.append(element('strong', '', dep.name), element('p', '', dep.purpose));
+    const shortVersion = dep.version?.match(/\d+\.\d+(?:\.\d+)?/)?.[0];
+    const version = element('span', 'dependency-version', dep.version ? shortVersion || 'Installed' : 'Missing');
+    version.title = dep.path ? `${dep.version}\n${dep.path}` : 'Install this tool, then check again.';
+    row.append(state, info, version); $('dependencies').append(row);
+  });
+  const missing = deps.filter(d => d.required && !d.version);
+  $('install-help').hidden = !missing.length;
+  $('continue').disabled = missing.length > 0;
+  $('setup-description').textContent = missing.length ? 'Restore the missing tools to continue downloading.' : 'All download tools are installed.';
+  $('dependency-warning').hidden = !missing.length;
+  $('dependency-warning').textContent = `Missing ${missing.map(d => d.name).join(', ')} · Open Settings`;
+  $('install-command').textContent = platform === 'windows' ? 'winget install --id yt-dlp.yt-dlp -e\nwinget install --id Gyan.FFmpeg -e\nwinget install --id DenoLand.Deno -e' : 'brew install yt-dlp ffmpeg deno';
+}
 async function scan() {
-  $('rescan').disabled = true; $('continue').disabled = true;
-  $('dependencies').replaceChildren(element('div', 'loading', 'Scanning installed tools…'));
-  try {
-    deps = await invoke('scan_dependencies');
-    $('dependencies').replaceChildren();
-    deps.forEach(dep => {
-      const row = element('div', 'dependency');
-      const state = element('span', `dependency-state${dep.version ? '' : ' missing'}`, dep.version ? '✓' : '!');
-      const info = element('div', 'dependency-info');
-      info.append(element('strong', '', dep.name), element('p', '', dep.purpose));
-      const version = element('span', 'dependency-version', dep.version ? dep.version.replace(/^ff\w+ version /, '') : 'Missing');
-      version.title = dep.path ? `${dep.version}\n${dep.path}` : 'Install this tool, then check again.';
-      row.append(state, info, version); $('dependencies').append(row);
-    });
-    const missing = deps.filter(d => d.required && !d.version);
-    $('install-help').hidden = !missing.length;
-    $('continue').disabled = missing.length > 0;
-    $('install-command').textContent = platform === 'windows' ? 'winget install --id yt-dlp.yt-dlp -e\nwinget install --id Gyan.FFmpeg -e\nwinget install --id DenoLand.Deno -e' : 'brew install yt-dlp ffmpeg deno';
-  } catch (error) { $('dependencies').textContent = 'Could not scan dependencies.'; report(error); }
+  $('rescan').disabled = true;
+  $('continue').disabled = true;
+  $('dependencies').replaceChildren(element('div', 'loading', 'Checking installed tools…'));
+  try { renderDependencies(await invoke('scan_dependencies')); }
+  catch (error) { $('dependencies').textContent = 'Could not check dependencies.'; report(error); }
   finally { $('rescan').disabled = false; }
 }
 $('link-form').addEventListener('submit', event => { event.preventDefault(); inspect(); });
 $('url').addEventListener('input', () => {
   ++request; $('metadata-loading').hidden = true; $('inspect').disabled = false;
   clearTimeout(pasteTimer); resetVideo();
-  $('link-hint').textContent = 'Paste a link to choose quality and subtitles.';
+  $('link-hint').textContent = 'Choose a video quality, MP3, or subtitles.';
 });
 $('url').addEventListener('paste', () => { clearTimeout(pasteTimer); pasteTimer = setTimeout(inspect, 350); });
 $('clear-video').onclick = () => { ++request; resetVideo(); $('url').value = ''; $('url').focus(); };
@@ -252,7 +261,9 @@ $('pause').onclick = () => queueAction(queue.paused ? 'resume' : 'pause');
 $('clear-history').onclick = () => queueAction('clear');
 $('choose-folder').onclick = () => invoke('choose_folder').catch(report);
 $('open-folder').onclick = () => invoke('reveal_folder', { id: null }).catch(report);
-$('settings-button').onclick = () => { showSetup(); scan(); };
+$('settings-button').onclick = () => { showSetup(); if (deps.length) renderDependencies(deps); };
+$('dependency-warning').onclick = () => { showSetup(); renderDependencies(deps); };
+$('footer-quit').onclick = () => invoke('quit_app').catch(report);
 $('rescan').onclick = scan;
 $('continue').onclick = async () => {
   try { await invoke('complete_setup'); queue.setupComplete = true; showDownloads(); $('url').focus(); }
@@ -265,13 +276,30 @@ document.addEventListener('keydown', event => { if (event.key === 'Escape' && pl
 async function start() {
   await listen('queue-changed', event => { queue = event.payload; renderQueue(); });
   await listen('app-error', event => report(event.payload));
+  await listen('dependencies-checked', event => renderDependencies(event.payload));
   await listen('panel-open', () => {
-    animateEntry($('app'), 'var(--panel-origin, 80%) top');
-    if (!video && !$('downloads').hidden) setTimeout(() => $('url').focus(), 150);
+    // AppKit animates the popover itself. Avoid a second content entrance.
+    if (hasOpened && queue.setupComplete) showDownloads();
+    hasOpened = true;
+    if (startupReady && !video && !$('downloads').hidden) $('url').focus();
   });
   const initial = await invoke('bootstrap');
   queue = initial.queue; platform = initial.platform;
   document.body.dataset.platform = platform;
-  if (queue.setupComplete) showDownloads(); else { showSetup(); await scan(); }
+  if (initial.dependencies) renderDependencies(initial.dependencies);
+  if (initial.firstLaunch) showSetup(); else showDownloads();
+  startupReady = true;
+  if (platform === 'macos') {
+    let lastHeight = 0;
+    const resize = () => {
+      const height = Math.ceil($('app').getBoundingClientRect().height);
+      if (Math.abs(height - lastHeight) > 1) {
+        lastHeight = height;
+        invoke('resize_panel', { height }).catch(report);
+      }
+    };
+    new ResizeObserver(resize).observe($('app'));
+    resize();
+  }
 }
 start().catch(report);

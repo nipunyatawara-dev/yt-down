@@ -15,6 +15,8 @@ use tokio::{
 };
 
 pub struct Engine {
+    pub dependencies: Mutex<Option<Vec<dependencies::Dependency>>>,
+    pub first_launch: bool,
     pub queue: Mutex<Queue>,
     pub metadata: Mutex<HashMap<String, Video>>,
     pub wake: Notify,
@@ -32,7 +34,12 @@ impl Engine {
             Err(e) => return Err(format!("Could not open the saved queue: {e}")),
         };
         queue.recover();
+        if !queue.jobs.iter().any(|job| job.status == Status::Queued) {
+            queue.paused = false;
+        }
         Ok(Arc::new(Self {
+            first_launch: !queue.setup_complete,
+            dependencies: Mutex::new(None),
             queue: Mutex::new(queue),
             metadata: Mutex::new(HashMap::new()),
             wake: Notify::new(),

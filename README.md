@@ -12,7 +12,7 @@ The queue runs one download at a time. Move waiting items up or down, cancel, re
 
 ## First launch
 
-The setup screen checks executable paths and versions, including PATH, WinGet portable packages, Scoop, and Chocolatey.
+The first-launch setup checks executable paths and versions, including PATH, WinGet portable packages, Scoop, and Chocolatey. A successful scan is saved immediately. Later launches open to downloads and check tools in the background. Missing tools trigger a system notification and a warning in the app. Settings shows cached tool status, with Check Again available explicitly.
 
 ```powershell
 winget install --id yt-dlp.yt-dlp -e
@@ -31,7 +31,6 @@ Requires Rust stable, Node.js 22+, npm, and Visual Studio Build Tools with Deskt
 ```sh
 npm ci
 npm run dev
-npm test
 npm run build
 ```
 
@@ -42,12 +41,12 @@ rustup target add x86_64-pc-windows-msvc
 npm run build:windows
 ```
 
-Bundles are written under `src-tauri/target/`. The Windows installer is unsigned. Windows SmartScreen may show an unknown-publisher prompt. The Windows build workflow runs native tests and uploads an NSIS installer as an artifact.
+Bundles are written under `src-tauri/target/`. The Windows installer is unsigned. Windows SmartScreen may show an unknown-publisher prompt. The Windows build workflow builds natively and uploads an NSIS installer as an artifact.
 
 ## Platform branches
 
 - `macos` is the menu bar app, with an anchored panel, click-away dismissal, and accessory activation.
-- `windows` is the desktop app, with a normal resizable window, taskbar entry, and NSIS installer. Its GitHub workflow builds and tests on Windows.
+- `windows` is the desktop app, with a normal resizable window, taskbar entry, and NSIS installer. Its GitHub workflow builds on Windows.
 
 Both branches keep the Rust engine and UI compatible with either platform. Platform-specific Tauri configuration and Rust conditionals provide the native behavior. The default configuration and build instructions on each branch target its platform.
 

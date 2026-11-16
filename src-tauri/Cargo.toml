@@ -1,17 +1,18 @@
 [package]
 name = "yt-down"
-version = "0.1.0"
+version = "0.2.0"
 description = "A small, queued YouTube downloader"
 authors = ["Nipun Yatawara"]
 edition = "2021"
-rust-version = "1.85"
+rust-version = "1.90"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["tray-icon", "image-png"] }
+tauri = { version = "~2.12", features = ["image-png", "macos-private-api"] }
 tauri-plugin-single-instance = "2"
+tauri-plugin-notification = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["process", "io-util", "time", "sync", "rt-multi-thread", "macros"] }
@@ -28,3 +29,10 @@ lto = true
 codegen-units = 1
 strip = true
 panic = "abort"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-foundation = "0.3"
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSApplication", "NSStatusBar", "NSStatusItem", "NSStatusBarButton", "NSPopover", "NSViewController", "NSView", "NSWindow", "NSImage", "NSButton", "NSControl", "NSResponder", "NSRunningApplication", "NSGraphics", "NSAppearance", "objc2-core-foundation"] }
+objc2-user-notifications = "0.3"
+block2 = "0.6"

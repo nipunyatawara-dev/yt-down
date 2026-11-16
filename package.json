@@ -1,6 +1,17 @@
 {
-  "name": "yt-down", "version": "0.1.0", "private": true,
+  "name": "yt-down",
+  "version": "0.2.0",
+  "private": true,
   "description": "Rust-powered YouTube downloads from your menu bar or desktop",
-  "scripts": { "dev": "tauri dev", "build": "tauri build", "build:mac": "tauri build --target universal-apple-darwin", "build:windows": "tauri build --target x86_64-pc-windows-msvc", "check": "cargo check --manifest-path src-tauri/Cargo.toml", "test": "cargo test --manifest-path src-tauri/Cargo.toml" },
-  "devDependencies": { "@tauri-apps/cli": "^2.10.0" }
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "build:mac": "tauri build --target universal-apple-darwin",
+    "build:windows": "tauri build --target x86_64-pc-windows-msvc",
+    "check": "cargo check --manifest-path src-tauri/Cargo.toml",
+    "test": "cargo test --manifest-path src-tauri/Cargo.toml"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.10.0"
+  }
 }
