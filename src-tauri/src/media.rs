@@ -267,7 +267,7 @@ mod tests {
     #[ignore = "requires YouTube access and installed yt-dlp/FFmpeg/Deno"]
     async fn live_downloads_video_mp3_and_subtitles() {
         use crate::model::{Status, Subtitle};
-        let video = fetch("https://www.youtube.com/watch?v=BaW_jenozKc")
+        let video = fetch("https://www.youtube.com/watch?v=jNQXAC9IVRw")
             .await
             .unwrap();
         let folder = std::env::temp_dir().join(format!("yt-down-smoke-{}", uuid::Uuid::new_v4()));
